@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import redis from '../config/redis';
 import { AppError } from '../utils/AppError';
-import { ErrorCode } from '../utils/errorCodes';
 import config from '../config';
 
 interface RateLimitOptions {
@@ -12,7 +11,7 @@ interface RateLimitOptions {
 }
 
 export const rateLimiter = (options: RateLimitOptions) => {
-    const { windowMs, max, keyGenerator, message } = options;
+    const { windowMs, keyGenerator } = options;
     const windowSeconds = Math.floor(windowMs / 1000);
 
     return async (req: Request, _res: Response, next: NextFunction) => {

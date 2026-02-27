@@ -9,16 +9,19 @@ import config from '../config';
 import { Platform, normalizePlatform } from '../types/platformTypes';
 import logger from '../utils/logger';
 
+import { normalizePhone } from '../utils/phoneUtils';
+
 export class AuthController {
     static requestOtp = asyncHandler(async (req: Request, res: Response) => {
-        const { phone } = req.body;
+        const { phone: rawPhone, name } = req.body;
+        const phone = normalizePhone(rawPhone);
 
         const user = await prisma.user.findUnique({ where: { phone } });
         if (!user) {
             await prisma.user.create({
                 data: {
                     phone,
-                    name: '',
+                    name: name || '',
                 },
             });
         }
@@ -40,7 +43,8 @@ export class AuthController {
     });
 
     static verifyOtp = asyncHandler(async (req: Request, res: Response) => {
-        const { phone, otp, device } = req.body;
+        const { phone: rawPhone, otp, device, name } = req.body;
+        const phone = normalizePhone(rawPhone);
 
         const isValid = await OtpService.verifyOtp(phone, otp);
         if (!isValid) {
@@ -51,16 +55,22 @@ export class AuthController {
         let isNewUser = false;
 
         if (!user) {
-
+            // Should not happen if requestOtp was called, but handle just in case
             user = await prisma.user.create({
                 data: {
                     phone,
-                    name: '',
+                    name: name || '',
                 },
             });
             isNewUser = true;
         } else if (!user.name) {
-
+            // Update name if provided and currently empty
+            if (name) {
+                user = await prisma.user.update({
+                    where: { id: user.id },
+                    data: { name },
+                });
+            }
             isNewUser = true;
         }
 

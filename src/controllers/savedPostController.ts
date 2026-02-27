@@ -207,7 +207,7 @@ export class SavedPostController {
                 body: post.body,
                 mediaUrls: post.mediaUrls,
                 youtubeVideoId: post.youtubeVideoId,
-                tags: post.tags,
+                tag: post.tag,
                 isPinned: post.isPinned,
                 createdAt: formatDate(post.createdAt),
                 savedAt: formatDate(savedPost.createdAt),

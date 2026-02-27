@@ -6,22 +6,26 @@ import { ErrorCode } from '../utils/errorCodes';
 import { Role, PostStatus } from '@prisma/client';
 import logger from '../utils/logger';
 import { TextFilterService } from '../services/textFilterService';
-import { getTagPriority, ROLE_PRIORITIES } from '../config/feedConfig';
+import { ROLE_PRIORITIES } from '../config/feedConfig';
 import { formatDate } from '../utils/dateUtils';
+import { PostRepository, FeedCursor } from '../repositories/PostRepository';
+import { PostVisibility } from '@prisma/client';
+import { UploadService } from '../services/uploadService';
 
-interface Cursor {
+const postRepository = new PostRepository();
+
+interface EncodedCursor {
     isPinned: boolean;
-    tagPriority: number;
     rolePriority: number;
     publishedAt: string;
     id: string;
 }
 
-const encodeCursor = (cursor: Cursor): string => {
+const encodeCursor = (cursor: EncodedCursor): string => {
     return Buffer.from(JSON.stringify(cursor)).toString('base64');
 };
 
-const decodeCursor = (cursorStr: string): Cursor | null => {
+const decodeCursor = (cursorStr: string): EncodedCursor | null => {
     try {
         return JSON.parse(Buffer.from(cursorStr, 'base64').toString('ascii'));
     } catch {
@@ -39,9 +43,10 @@ export class PostController {
             id: post.id,
             title: post.title,
             body: post.body,
+            visibility: post.visibility,
             mediaUrls: post.mediaUrls,
             youtubeVideoId: post.youtubeVideoId,
-            tags: post.tags,
+            tags: post.tags, // Return array of tags
             isPinned: post.isPinned,
             createdAt: formatDate(post.createdAt),
 
@@ -64,8 +69,38 @@ export class PostController {
     }
 
     static createPost = asyncHandler(async (req: Request, res: Response) => {
-        const { title, body, mediaUrls, youtubeVideoId, isPinned, tags } = req.body;
+        logger.info('Create Post Payload', {
+            body: req.body,
+            files: req.files ? (req.files as any[]).map((f: any) => f.originalname) : []
+        });
+        const { title, body, youtubeVideoId, isPinned, tagIds, visibility } = req.body;
+        let { mediaUrls } = req.body;
         const user = req.user!;
+
+        // Handle uploaded files
+        if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+            const uploadedUrls = await Promise.all(
+                (req.files as Express.Multer.File[]).map(async (file) => {
+                    const fileType = file.mimetype.split('/')[0];
+                    if (fileType === 'image') {
+                        const processedFilename = await UploadService.processImage(file);
+                        return `/uploads/${processedFilename}`;
+                    } else {
+                        return `/uploads/${file.filename}`;
+                    }
+                })
+            );
+
+            // Initialize or append to mediaUrls
+            if (!mediaUrls) {
+                mediaUrls = uploadedUrls;
+            } else if (Array.isArray(mediaUrls)) {
+                mediaUrls = [...mediaUrls, ...uploadedUrls];
+            } else {
+                // If mediaUrls came as a string (from single input in multipart), convert to array
+                mediaUrls = [mediaUrls, ...uploadedUrls];
+            }
+        }
 
         if (isPinned && user.role !== Role.ADMIN && user.role !== Role.STAFF) {
             throw new AppError(ErrorCode.FORBIDDEN, 'Only Admin/Staff can pin posts');
@@ -77,12 +112,69 @@ export class PostController {
             throw new AppError(ErrorCode.VALIDATION_ERROR, filterResult.description || 'Content violations found');
         }
 
-        let status = filterResult.status;
+        const status = filterResult.status;
 
+        // Handle tags
+        let finalTagIds: string[] = [];
 
-        const finalTags = (!tags || tags.length === 0) ? ['DEFAULT'] : tags;
-        const tagPriority = getTagPriority(finalTags);
-        const rolePriority = ROLE_PRIORITIES[user.role] || 10;
+        // If 'tags' (names) provided, look them up
+        if (req.body.tags) {
+            const inputTags = Array.isArray(req.body.tags) ? req.body.tags : [req.body.tags];
+            const validTags = await prisma.tag.findMany({
+                where: { name: { in: inputTags } },
+                select: { id: true }
+            });
+            finalTagIds = [...finalTagIds, ...validTags.map(t => t.id)];
+        }
+
+        // If 'tag' (singular name) provided - legacy/alternative support
+        if (req.body.tag) {
+            const singleTag = await prisma.tag.findUnique({ where: { name: req.body.tag } });
+            if (singleTag) finalTagIds.push(singleTag.id);
+        }
+
+        // If 'tagIds' (IDs) provided, allow that too
+        if (tagIds) {
+            let parsedTagIds = tagIds;
+            if (typeof tagIds === 'string') {
+                try {
+                    parsedTagIds = JSON.parse(tagIds);
+                } catch {
+                    if (tagIds.startsWith('[') && tagIds.endsWith(']')) {
+                        parsedTagIds = tagIds.slice(1, -1).split(',').map((id: string) => id.trim());
+                    } else {
+                        parsedTagIds = [tagIds];
+                    }
+                }
+            }
+            if (Array.isArray(parsedTagIds) && parsedTagIds.length > 0) {
+                finalTagIds = [...finalTagIds, ...parsedTagIds];
+            }
+        }
+
+        // Deduplicate
+        finalTagIds = [...new Set(finalTagIds)];
+
+        if (finalTagIds.length === 0) {
+            // Default tag if none provided
+            const defaultTag = await prisma.tag.findUnique({ where: { name: 'DEFAULT' } });
+            if (defaultTag) finalTagIds = [defaultTag.id];
+        }
+
+        // Calculate rolePriority based on tags
+        let rolePriority = ROLE_PRIORITIES[user.role] || 10;
+
+        if (finalTagIds.length > 0) {
+            const tags = await prisma.tag.findMany({
+                where: { id: { in: finalTagIds } },
+                select: { priority: true }
+            });
+
+            if (tags.length > 0) {
+                const maxTagPriority = Math.max(...tags.map(t => t.priority));
+                rolePriority = Math.max(rolePriority, maxTagPriority);
+            }
+        }
 
         const post = await prisma.post.create({
             data: {
@@ -93,9 +185,11 @@ export class PostController {
                 youtubeVideoId,
                 isPinned: isPinned || false,
                 status,
-                tags: finalTags,
-                tagPriority,
                 rolePriority,
+                visibility: visibility || PostVisibility.PUBLIC,
+                tags: {
+                    connect: finalTagIds.map(id => ({ id }))
+                }
             },
             include: {
                 author: {
@@ -105,6 +199,7 @@ export class PostController {
                         profilePicUrl: true,
                     },
                 },
+                tags: true,
                 _count: {
                     select: {
                         likes: true,
@@ -141,75 +236,38 @@ export class PostController {
 
         const includeHidden = req.query.includeHidden === 'true';
         const isAdmin = req.user?.role === Role.ADMIN;
+        const viewerId = req.user?.id;
+        const viewerRole = req.user?.role;
 
-        const where: any = {
-            status: PostStatus.PUBLISHED,
-        };
-
-        if (isAdmin && includeHidden) {
-            delete where.status;
+        if (!viewerId) {
+            // Should be handled by verifyToken, but strictly:
+            throw new AppError(ErrorCode.UNAUTHORIZED, 'User not authenticated');
         }
 
-        let cursorWhere: any = {};
-
+        let cursor: FeedCursor | undefined;
         if (cursorStr) {
-            const cursor = decodeCursor(cursorStr);
-            if (!cursor) {
-                throw new AppError(ErrorCode.VALIDATION_ERROR, 'Invalid cursor');
+            const decoded = decodeCursor(cursorStr);
+            if (decoded) {
+                cursor = {
+                    isPinned: decoded.isPinned,
+                    rolePriority: decoded.rolePriority,
+                    publishedAt: new Date(decoded.publishedAt),
+                    id: decoded.id
+                };
             }
-
-            cursorWhere = {
-                OR: [
-                    { isPinned: { lt: cursor.isPinned } },
-                    { isPinned: cursor.isPinned, tagPriority: { lt: cursor.tagPriority } },
-                    { isPinned: cursor.isPinned, tagPriority: cursor.tagPriority, rolePriority: { lt: cursor.rolePriority } },
-                    { isPinned: cursor.isPinned, tagPriority: cursor.tagPriority, rolePriority: cursor.rolePriority, publishedAt: { lt: cursor.publishedAt } },
-                    { isPinned: cursor.isPinned, tagPriority: cursor.tagPriority, rolePriority: cursor.rolePriority, publishedAt: cursor.publishedAt, id: { lt: cursor.id } },
-                ]
-            };
-
-            Object.assign(where, cursorWhere);
         }
 
-        const rawPosts = await prisma.post.findMany({
-            where,
-            take: limit + 1,
-            skip: page ? (page - 1) * limit : undefined,
-            orderBy: [
-                { isPinned: 'desc' },
-                { tagPriority: 'desc' },
-                { rolePriority: 'desc' },
-                { publishedAt: 'desc' },
-                { id: 'desc' },
-            ],
-            include: {
-                author: {
-                    select: {
-                        id: true,
-                        name: true,
-                        profilePicUrl: true,
-                        role: true,
-                    },
-                },
-                _count: {
-                    select: {
-                        likes: true,
-                        comments: true,
-                    },
-                },
-            },
-        });
+        const rawPosts = await postRepository.getFeed(viewerId, isAdmin, limit, cursor, includeHidden);
 
         let nextCursor: string | null = null;
 
         if (rawPosts.length > limit) {
-            const nextItem = rawPosts.pop();
+            rawPosts.pop();
 
             if (rawPosts.length > 0) {
                 const lastPost = rawPosts[rawPosts.length - 1];
                 nextCursor = encodeCursor({
                     isPinned: lastPost.isPinned,
-                    tagPriority: lastPost.tagPriority,
                     rolePriority: lastPost.rolePriority,
                     publishedAt: lastPost.publishedAt.toISOString(),
                     id: lastPost.id,
@@ -217,8 +275,6 @@ export class PostController {
             }
         }
 
-        const viewerId = req.user?.id;
-        const viewerRole = req.user?.role;
         const likedPostIds = new Set<string>();
         const savedPostIds = new Set<string>();
 
@@ -288,11 +344,15 @@ export class PostController {
     });
 
     static updatePost = asyncHandler(async (req: Request, res: Response) => {
+        logger.info('Update Post Payload', {
+            body: req.body,
+            files: req.files ? (req.files as any[]).map((f: any) => f.originalname) : []
+        });
         const { id } = req.params;
-        const { title, body, mediaUrls, youtubeVideoId, isPinned, tags } = req.body;
+        const { title, body, mediaUrls, youtubeVideoId, isPinned, tagIds, visibility } = req.body;
         const user = req.user!;
 
-        const post = await prisma.post.findUnique({ where: { id } });
+        const post = await prisma.post.findUnique({ where: { id } },);
         if (!post) {
             throw new AppError(ErrorCode.NOT_FOUND, 'Post not found');
         }
@@ -329,13 +389,68 @@ export class PostController {
             }
         }
 
-        let tagPriority = undefined;
-        let finalTags = undefined;
+        // Handle tags update if provided
+        let tagsUpdate = undefined;
+        let finalTagIds: string[] | undefined = undefined;
 
-        if (tags !== undefined) {
-            finalTags = (tags.length === 0) ? ['DEFAULT'] : tags;
-            tagPriority = getTagPriority(finalTags);
+        if (req.body.tags || req.body.tag || tagIds) {
+            finalTagIds = [];
+
+            if (req.body.tags) {
+                const inputTags = Array.isArray(req.body.tags) ? req.body.tags : [req.body.tags];
+                const validTags = await prisma.tag.findMany({
+                    where: { name: { in: inputTags } },
+                    select: { id: true }
+                });
+                finalTagIds = [...finalTagIds, ...validTags.map(t => t.id)];
+            }
+
+            if (req.body.tag) {
+                const singleTag = await prisma.tag.findUnique({ where: { name: req.body.tag } });
+                if (singleTag) finalTagIds.push(singleTag.id);
+            }
+
+            if (tagIds) {
+                let parsedTagIds = tagIds;
+                if (typeof tagIds === 'string') {
+                    try {
+                        parsedTagIds = JSON.parse(tagIds);
+                    } catch {
+                        if (tagIds.startsWith('[') && tagIds.endsWith(']')) {
+                            parsedTagIds = tagIds.slice(1, -1).split(',').map((id: string) => id.trim());
+                        } else {
+                            parsedTagIds = [tagIds];
+                        }
+                    }
+                }
+                if (Array.isArray(parsedTagIds)) {
+                    finalTagIds = [...finalTagIds, ...parsedTagIds];
+                }
+            }
+
+            // Deduplicate
+            finalTagIds = [...new Set(finalTagIds)];
+
+            tagsUpdate = {
+                set: finalTagIds.map(id => ({ id }))
+            };
         }
+
+        let rolePriority = undefined;
+
+        if (finalTagIds && finalTagIds.length > 0) {
+            const tags = await prisma.tag.findMany({
+                where: { id: { in: finalTagIds } },
+                select: { priority: true }
+            });
+
+            if (tags.length > 0) {
+                const maxTagPriority = Math.max(...tags.map(t => t.priority));
+                const userBasePriority = ROLE_PRIORITIES[user.role] || 10;
+                rolePriority = Math.max(userBasePriority, maxTagPriority);
+            }
+        }
+
 
         const updatedPost = await prisma.post.update({
             where: { id },
@@ -344,10 +459,11 @@ export class PostController {
                 body,
                 mediaUrls,
                 youtubeVideoId,
-                ...(finalTags !== undefined && { tags: finalTags }),
-                ...(tagPriority !== undefined && { tagPriority }),
+                ...(tagsUpdate && { tags: tagsUpdate }),
+                ...(rolePriority !== undefined && { rolePriority }),
                 ...(isPinned !== undefined && { isPinned }),
                 ...(newStatus && { status: newStatus }),
+                ...(visibility && { visibility }),
             },
             include: {
                 author: {
@@ -355,8 +471,10 @@ export class PostController {
                         id: true,
                         name: true,
                         profilePicUrl: true,
+                        role: true, // Ensuring role is selected for consistency
                     },
                 },
+                tags: true,
                 _count: {
                     select: {
                         likes: true,
@@ -401,6 +519,7 @@ export class PostController {
         const updatedPost = await prisma.post.update({
             where: { id },
             data: { status: PostStatus.HIDDEN },
+            include: { tags: true } // Include tags in response
         });
 
         logger.warn('Post hidden by Admin', {
@@ -428,6 +547,7 @@ export class PostController {
         const updatedPost = await prisma.post.update({
             where: { id },
             data: { status: PostStatus.PUBLISHED },
+            include: { tags: true }
         });
 
         logger.info('Post restored by Admin', {
@@ -522,8 +642,10 @@ export class PostController {
                         id: true,
                         name: true,
                         profilePicUrl: true,
+                        role: true,
                     },
                 },
+                tags: true,
                 _count: {
                     select: {
                         likes: true,

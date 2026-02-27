@@ -64,10 +64,30 @@ enum ConversationType {
   COMMUNITY
 }
 
+
+
 enum MessageStatusType {
   SENT
   DELIVERED
   READ
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  BLOCKED
+}
+
+enum PostVisibility {
+  PUBLIC
+  FRIENDS
+  ONLY_ME
+}
+
+enum ProfileVisibility {
+  PUBLIC
+  FRIENDS
 }
 
 model User {
@@ -104,6 +124,10 @@ model User {
   blockedBy         BlockedUser[] @relation("UserBlocker")
   commentLikes      CommentLike[]
   settings          UserSettings?
+  
+  profileVisibility ProfileVisibility @default(PUBLIC)
+  sentFriendRequests Friendship[] @relation("FriendRequester")
+  receivedFriendRequests Friendship[] @relation("FriendReceiver")
 }
 
 model RefreshToken {
@@ -140,6 +164,7 @@ model EmergencyContact {
   user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+
 model Post {
   id             String    @id @default(uuid())
   authorId       String
@@ -147,10 +172,9 @@ model Post {
   body           String
   mediaUrls      String[]
   youtubeVideoId String?
-  tags           String[]
-  tagPriority    Int      @default(10)
   rolePriority   Int      @default(10)
   status         PostStatus @default(PUBLISHED)
+  visibility     PostVisibility @default(PUBLIC)
   isPinned       Boolean    @default(false)
   scheduledAt    DateTime?
   publishedAt    DateTime  @default(now())
@@ -158,13 +182,23 @@ model Post {
   updatedAt      DateTime  @updatedAt
 
   author         User      @relation(fields: [authorId], references: [id])
+  tags           Tag[]
   comments       Comment[]
   likes          Like[]
   reports        Report[]
   savedPosts     SavedPost[]
 
-  @@index([isPinned, tagPriority, rolePriority, publishedAt, id])
+  @@index([isPinned, rolePriority, publishedAt, id])
   @@index([authorId])
+}
+
+model Tag {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  priority  Int      @default(10)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  posts     Post[]
 }
 
 model Comment {
@@ -394,4 +428,20 @@ model CommentLike {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([commentId, userId])
+}
+
+model Friendship {
+  id           String   @id @default(uuid())
+  requesterId  String
+  receiverId   String
+  status       FriendshipStatus
+  createdAt    DateTime @default(now())
+  acceptedAt   DateTime?
+
+  requester    User @relation("FriendRequester", fields: [requesterId], references: [id])
+  receiver     User @relation("FriendReceiver", fields: [receiverId], references: [id])
+
+  @@unique([requesterId, receiverId])
+  @@index([requesterId, status])
+  @@index([receiverId, status])
 }

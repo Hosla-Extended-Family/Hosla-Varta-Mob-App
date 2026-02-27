@@ -20,5 +20,7 @@ router.put('/profile', upload.single('profilePicture'), validate(updateProfileSc
 router.post('/:userId/block', validate({ params: userIdParamSchema }), BlockedUserController.blockUser);
 router.delete('/:userId/unblock', validate({ params: userIdParamSchema }), BlockedUserController.unblockUser);
 router.get('/blocked', BlockedUserController.getBlockedUsers);
+router.get('/search', UserController.searchUsers);
+router.get('/:userId', validate({ params: userIdParamSchema }), UserController.getUserProfile);
 
 export default router;

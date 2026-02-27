@@ -61,7 +61,7 @@ export class LikeController {
 
         } catch (error: any) {
             if (error.code === 'P2002') {
-
+                void error;
             } else {
                 throw error;
             }
@@ -95,7 +95,7 @@ export class LikeController {
         } catch (error: any) {
 
             if (error.code === 'P2025') {
-
+                void error;
             } else {
                 throw error;
             }
@@ -153,7 +153,7 @@ export class LikeController {
             }
         } catch (error: any) {
             if (error.code === 'P2002') {
-
+                void error;
             } else {
                 throw error;
             }
@@ -182,7 +182,7 @@ export class LikeController {
             logger.info('Comment unliked', { userId, commentId });
         } catch (error: any) {
             if (error.code === 'P2025') {
-
+                void error;
             } else {
                 throw error;
             }

@@ -1,5 +1,5 @@
 import { firebaseAdmin, isFirebaseInitialized } from '../config/firebase';
-import { Message, MulticastMessage } from 'firebase-admin/messaging';
+import { Message } from 'firebase-admin/messaging';
 import { addJob, JobType } from '../config/queue';
 
 class NotificationService {

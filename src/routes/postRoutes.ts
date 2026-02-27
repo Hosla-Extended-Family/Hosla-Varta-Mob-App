@@ -3,7 +3,8 @@ import { PostController } from '../controllers/postController';
 import { LikeController } from '../controllers/likeController';
 import { CommentController } from '../controllers/commentController';
 import { SavedPostController } from '../controllers/savedPostController';
-import { verifyToken, verifyTokenOptional, requireCompleteProfile } from '../middlewares/verifyToken';
+import { verifyToken, requireCompleteProfile } from '../middlewares/verifyToken';
+import { upload } from '../middlewares/upload';
 import { savePostRateLimiter } from '../middlewares/rateLimiter';
 import { validate } from '../middlewares/validate';
 import { createPostSchema, updatePostSchema, userIdParamSchema } from '../validations/postValidation';
@@ -25,8 +26,8 @@ router.use(verifyToken);
 router.use(requireCompleteProfile);
 
 
-router.post('/', validate(createPostSchema), PostController.createPost);
-router.put('/:id', validate(updatePostSchema), PostController.updatePost);
+router.post('/', upload.any(), validate(createPostSchema), PostController.createPost);
+router.put('/:id', upload.any(), validate(updatePostSchema), PostController.updatePost);
 
 router.delete('/:id', PostController.deletePost);
 router.post('/:id/like', LikeController.likePost);

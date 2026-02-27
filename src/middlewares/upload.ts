@@ -20,14 +20,21 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+    console.log('File upload attempt:', {
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+    });
+
     const allowedMimeTypes = [
         'image/jpeg',
         'image/png',
         'image/gif',
         'image/webp',
+        'image/jpg',
         'video/mp4',
         'video/quicktime',
         'application/pdf',
+        'application/octet-stream'
     ];
 
     if (allowedMimeTypes.includes(file.mimetype)) {
@@ -36,7 +43,7 @@ const fileFilter = (_req: any, file: Express.Multer.File, cb: multer.FileFilterC
         cb(
             new AppError(
                 ErrorCode.VALIDATION_ERROR,
-                `Invalid file type. Allowed: ${allowedMimeTypes.join(', ')}`,
+                `Invalid file type: ${file.mimetype}. Allowed: ${allowedMimeTypes.join(', ')}`,
                 400
             ) as unknown as Error
         );

@@ -6,6 +6,9 @@ import commentRoutes from './commentRoutes';
 import reportRoutes from './reportRoutes';
 import analyticsRoutes from './analyticsRoutes';
 import deviceRoutes from './deviceRoutes';
+import tagRoutes from './tagRoutes';
+import friendRoutes from './friendRoutes';
+// import uploadRoutes from './uploadRoutes';
 
 const router = Router();
 
@@ -26,5 +29,8 @@ router.use('/comments', commentRoutes);
 router.use('/reports', reportRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/devices', deviceRoutes);
+router.use('/tags', tagRoutes);
+router.use('/friends', friendRoutes);
+// router.use('/upload', uploadRoutes);
 
 export default router;
