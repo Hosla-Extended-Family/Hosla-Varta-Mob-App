@@ -48,23 +48,10 @@ export class FriendService {
                     return this.acceptRequest(requesterId, existing.id);
                 }
             }
-            // If REJECTED, can we resend? Usually yes, after some time. 
-            // For now, let's allow if REJECTED (create new or update?). 
-            // Schema has unique constraint on [requesterId, receiverId], so we must UPDATE if exists, or delete and create.
-            // But simpler: just throw error if REJECTED for now, or handle re-request.
-            // Strict rules: "If reverse pending exists → auto-accept". "Cannot send like if already friends".
-            // Let's assume if REJECTED, we can update to PENDING.
+           
         }
 
-        // Check if there is a row (A, B) or (B, A). 
-        // If (A->B) exists:
-        //   PENDING: wait
-        //   ACCEPTED: done
-        //   REJECTED: ?
-        // If (B->A) exists:
-        //   PENDING: auto-accept (handled above)
-
-        // If existing row matches exact direction (A->B)
+     
         const exactExisting = await prisma.friendship.findUnique({
             where: {
                 requesterId_receiverId: {
@@ -76,13 +63,12 @@ export class FriendService {
 
         if (exactExisting) {
             if (exactExisting.status === FriendshipStatus.REJECTED) {
-                // Allow re-requesting by updating status
                 return prisma.friendship.update({
                     where: { id: exactExisting.id },
                     data: { status: FriendshipStatus.PENDING, createdAt: new Date() } // reset time
                 });
             }
-            // Should have been caught by general check, but just in case
+          
             if (exactExisting.status === FriendshipStatus.ACCEPTED) throw new AppError(ErrorCode.VALIDATION_ERROR, 'Already friends');
             if (exactExisting.status === FriendshipStatus.PENDING) throw new AppError(ErrorCode.VALIDATION_ERROR, 'Request already sent');
         }
@@ -142,8 +128,7 @@ export class FriendService {
             return friendRepository.removeFriend(friendship.requesterId, friendship.receiverId);
         }
 
-        // If it's PENDING, REJECTED, or BLOCKED, we just delete the row
-        // This allows both requester to "cancel" and receiver to "dismiss/reject" via the same API
+    
         return prisma.friendship.delete({ where: { id: friendshipId } });
     }
 

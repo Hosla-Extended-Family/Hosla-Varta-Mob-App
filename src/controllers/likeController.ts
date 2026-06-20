@@ -193,4 +193,31 @@ export class LikeController {
             liked: false
         });
     });
+
+    static getPostLikes = asyncHandler(async (req: Request, res: Response) => {
+        const { id: postId } = req.params;
+
+        const likes = await prisma.like.findMany({
+            where: { postId },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        profilePicUrl: true
+                    }
+                }
+            },
+            orderBy: {
+                createdAt: 'desc'
+            }
+        });
+
+        const users = likes.map(like => like.user);
+
+        res.status(200).json({
+            success: true,
+            data: users
+        });
+    });
 }

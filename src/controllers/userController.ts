@@ -131,7 +131,10 @@ export class UserController {
         // PUBLIC: Allow
         // FRIENDS: Allow if friends
 
-        let isFriend = false;
+        let friendshipStatus: 'NOT_FRIENDS' | 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'BLOCKED' = 'NOT_FRIENDS';
+        let friendshipId: string | null = null;
+        let isIncoming = false;
+
         if (viewerId) {
             const friendship = await prisma.friendship.findFirst({
                 where: {
@@ -139,33 +142,23 @@ export class UserController {
                         { requesterId: viewerId, receiverId: userId },
                         { requesterId: userId, receiverId: viewerId }
                     ],
-                    status: FriendshipStatus.ACCEPTED
                 }
             });
-            if (friendship) isFriend = true;
-        }
 
-        /* 
-        // Logic:
-        // if PUBLIC -> allow
-        // if FRIENDS -> allow if isFriend
-
-        if (user.profileVisibility === ProfileVisibility.PUBLIC) {
-            // Allow
-        } else if (user.profileVisibility === ProfileVisibility.FRIENDS) {
-            if (!isFriend) {
-                throw new AppError(ErrorCode.USER_NOT_FOUND, 'User not found');
+            if (friendship) {
+                friendshipStatus = friendship.status as any;
+                friendshipId = friendship.id;
+                isIncoming = friendship.receiverId === viewerId;
             }
         }
-        */
-        // Simple Logic for now: Allow all since all were requested to be public
-        // No ONLY_ME for profile visibility in requirements, only PUBLIC/FRIENDS enum.
 
         res.status(200).json({
             success: true,
             data: {
                 user,
-                isFriend, // Optional: helpful for frontend
+                friendshipStatus,
+                friendshipId,
+                isIncoming
             },
         });
     });

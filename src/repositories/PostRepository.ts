@@ -20,16 +20,16 @@ export class PostRepository {
 
         const visibilityFilter = isAdmin ? {} : {
             OR: [
-                // 1. Public posts
+                
                 { visibility: PostVisibility.PUBLIC },
 
-                // 2. ONLY_ME posts (only if author is viewer)
+              
                 {
                     visibility: PostVisibility.ONLY_ME,
                     authorId: userId
                 },
 
-                // 3. FRIENDS posts (if author is friend of viewer OR author is viewer)
+
                 {
                     visibility: PostVisibility.FRIENDS,
                     OR: [
@@ -49,9 +49,7 @@ export class PostRepository {
             ]
         };
 
-        // Also exclude posts from blocked users / users who blocked the viewer
-        // But the requirement says "Friend check must use EXISTS query — not post-filtering."
-        // Prisma `some` filter on relations effectively does `EXISTS`.
+
 
         let cursorWhere = {};
         if (cursor) {
@@ -78,7 +76,7 @@ export class PostRepository {
             ...statusFilter,
             ...visibilityFilter,
             ...cursorWhere,
-            // Explicitly exclude blocked users
+  
             author: {
                 blockedUsers: {
                     none: { blockedId: userId }

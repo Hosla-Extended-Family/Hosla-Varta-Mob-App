@@ -30,6 +30,12 @@ interface Config {
             authToken: string;
             phoneNumber: string;
         };
+        fast2sms: {
+            apiKey: string;
+            entityId: string;
+            senderId: string;
+            templateId: string;
+        };
     };
     firebase: {
         projectId: string;
@@ -101,6 +107,12 @@ const config: Config = {
             accountSid: getEnvVar('TWILIO_ACCOUNT_SID', ''),
             authToken: getEnvVar('TWILIO_AUTH_TOKEN', ''),
             phoneNumber: getEnvVar('TWILIO_PHONE_NUMBER', ''),
+        },
+        fast2sms: {
+            apiKey: getEnvVar('FAST2SMS_API_KEY', ''),
+            entityId: getEnvVar('FAST2SMS_ENTITY_ID', ''),
+            senderId: getEnvVar('FAST2SMS_SENDER_ID', 'HoslaM'),
+            templateId: getEnvVar('FAST2SMS_TEMPLATE_ID', '138484'),
         },
     },
 

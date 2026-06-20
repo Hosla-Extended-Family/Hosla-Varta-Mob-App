@@ -32,6 +32,7 @@ router.put('/:id', upload.any(), validate(updatePostSchema), PostController.upda
 router.delete('/:id', PostController.deletePost);
 router.post('/:id/like', LikeController.likePost);
 router.delete('/:id/like', LikeController.unlikePost);
+router.get('/:id/likes', LikeController.getPostLikes);
 
 router.post('/:postId/save', savePostRateLimiter, validate({ params: postIdParamSchema }), SavedPostController.savePost);
 router.delete('/:postId/save', savePostRateLimiter, validate({ params: postIdParamSchema }), SavedPostController.unsavePost);

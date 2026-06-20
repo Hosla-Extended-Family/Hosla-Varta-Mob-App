@@ -34,7 +34,7 @@ export class FriendRepository {
     }
 
     async acceptRequest(friendshipId: string, item: { requesterId: string, receiverId: string }) {
-        // Transaction to update status AND create reciprocal friendship
+       
         return prisma.$transaction([
             prisma.friendship.update({
                 where: { id: friendshipId },
@@ -45,7 +45,7 @@ export class FriendRepository {
             }),
             prisma.friendship.create({
                 data: {
-                    requesterId: item.receiverId, // The receiver of original request becomes requester of reciprocal
+                    requesterId: item.receiverId, 
                     receiverId: item.requesterId,
                     status: FriendshipStatus.ACCEPTED,
                     acceptedAt: new Date(),
@@ -62,7 +62,7 @@ export class FriendRepository {
     }
 
     async removeFriend(user1Id: string, user2Id: string) {
-        // Delete both rows
+      
         return prisma.$transaction(async (tx) => {
             await tx.friendship.deleteMany({
                 where: {
@@ -87,7 +87,7 @@ export class FriendRepository {
                         id: true,
                         name: true,
                         profilePicUrl: true,
-                        // Add more fields if needed
+                       
                     },
                 },
             },

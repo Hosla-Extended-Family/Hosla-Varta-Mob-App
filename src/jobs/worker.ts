@@ -5,6 +5,7 @@ import logger from '../utils/logger';
 import { JobType } from '../config/queue';
 import { firebaseAdmin } from '../config/firebase';
 import { MulticastMessage } from 'firebase-admin/messaging';
+import { SmsService } from '../services/smsService';
 
 const connection = new IORedis(config.redis.url, {
     maxRetriesPerRequest: null,
@@ -21,7 +22,7 @@ const worker = new Worker(
                 break;
 
             case JobType.SEND_OTP:
-                logger.info('Sending OTP (Mock):', job.data);
+                await handleSendOtp(job.data);
                 break;
 
             default:
@@ -58,6 +59,25 @@ async function handlePushNotification(data: any) {
 
     } catch (error) {
         logger.error('Error in handlePushNotification:', error);
+        throw error;
+    }
+}
+
+async function handleSendOtp(data: any) {
+    const { phone, otp, expiry } = data;
+
+    if (!phone || !otp) {
+        logger.error('Missing phone or otp in job data', data);
+        return;
+    }
+
+    try {
+        const success = await SmsService.sendOtp(phone, otp, expiry);
+        if (!success) {
+            throw new Error(`Failed to send SMS to ${phone}`);
+        }
+    } catch (error) {
+        logger.error('Error in handleSendOtp:', error);
         throw error;
     }
 }
