@@ -1,5 +1,6 @@
 import { Queue, Worker, Job } from 'bullmq';
-import redis from './redis';
+import IORedis from 'ioredis';
+import config from './index';
 
 export enum JobType {
     SEND_OTP = 'SEND_OTP',
@@ -11,15 +12,14 @@ export enum JobType {
     AGGREGATE_ANALYTICS = 'AGGREGATE_ANALYTICS',
 }
 
-const connection = {
-    host: redis.options.host || 'localhost',
-    port: redis.options.port || 6379,
-};
+const connection = new IORedis(config.redis.url, {
+    maxRetriesPerRequest: null,
+});
 
-export const notificationQueue = new Queue('notifications', { connection });
-export const mediaQueue = new Queue('media-processing', { connection });
-export const scheduledQueue = new Queue('scheduled-tasks', { connection });
-export const analyticsQueue = new Queue('analytics', { connection });
+export const notificationQueue = new Queue('notifications', { connection: connection as any });
+export const mediaQueue = new Queue('media-processing', { connection: connection as any });
+export const scheduledQueue = new Queue('scheduled-tasks', { connection: connection as any });
+export const analyticsQueue = new Queue('analytics', { connection: connection as any });
 
 export const getQueue = (jobType: JobType): Queue => {
     switch (jobType) {
