@@ -43,8 +43,18 @@ export class FriendRepository {
                     acceptedAt: new Date()
                 },
             }),
-            prisma.friendship.create({
-                data: {
+            prisma.friendship.upsert({
+                where: {
+                    requesterId_receiverId: {
+                        requesterId: item.receiverId,
+                        receiverId: item.requesterId,
+                    }
+                },
+                update: {
+                    status: FriendshipStatus.ACCEPTED,
+                    acceptedAt: new Date(),
+                },
+                create: {
                     requesterId: item.receiverId, 
                     receiverId: item.requesterId,
                     status: FriendshipStatus.ACCEPTED,
@@ -97,11 +107,21 @@ export class FriendRepository {
     async listPendingRequests(userId: string) {
         return prisma.friendship.findMany({
             where: {
-                receiverId: userId,
+                OR: [
+                    { receiverId: userId },
+                    { requesterId: userId },
+                ],
                 status: FriendshipStatus.PENDING,
             },
             include: {
                 requester: {
+                    select: {
+                        id: true,
+                        name: true,
+                        profilePicUrl: true,
+                    },
+                },
+                receiver: {
                     select: {
                         id: true,
                         name: true,
