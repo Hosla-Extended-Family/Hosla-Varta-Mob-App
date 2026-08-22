@@ -11,6 +11,11 @@ const friendRepository = new FriendRepository();
 
 const RESEND_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const RESEND_COOLDOWN_KEY_PREFIX = 'friendreq:rejectcooldown';
+const PLACEHOLDER_FCM_TOKENS = new Set(['web_token', 'no_fcm_token']);
+
+function isRealFcmToken(token: string) {
+    return token.length > 40 && !PLACEHOLDER_FCM_TOKENS.has(token);
+}
 
 export class FriendService {
     private static cooldownKey(requesterId: string, receiverId: string) {
@@ -47,13 +52,9 @@ export class FriendService {
     ) {
         try {
             const devices = await prisma.device.findMany({ where: { userId } });
-            if (devices.length === 0) return;
-            await notificationService.sendMulticast(
-                devices.map((d) => d.fcmToken),
-                title,
-                body,
-                data
-            );
+            const tokens = devices.map((d) => d.fcmToken).filter(isRealFcmToken);
+            if (tokens.length === 0) return;
+            await notificationService.sendMulticast(tokens, title, body, data);
         } catch (error) {
             logger.warn('Failed to send friend notification:', error);
         }

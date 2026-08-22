@@ -11,6 +11,8 @@ import logger from '../utils/logger';
 
 import { normalizePhone } from '../utils/phoneUtils';
 
+const PLACEHOLDER_FCM_TOKENS = new Set(['web_token', 'no_fcm_token']);
+
 export class AuthController {
     static requestOtp = asyncHandler(async (req: Request, res: Response) => {
         const { phone: rawPhone, name } = req.body;
@@ -87,7 +89,7 @@ export class AuthController {
             isNewUser,
         });
 
-        if (device) {
+        if (device?.fcmToken && !PLACEHOLDER_FCM_TOKENS.has(device.fcmToken)) {
             await prisma.device.deleteMany({
                 where: { fcmToken: device.fcmToken },
             });

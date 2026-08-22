@@ -12,7 +12,7 @@ export const verifyOtpSchema = {
         phone: commonSchemas.phone,
         otp: z.string().length(6, 'OTP must be 6 digits'),
         device: z.object({
-            fcmToken: z.string(),
+            fcmToken: z.string().trim().optional(),
             platform: z.enum(['ANDROID', 'IOS', 'WEB', 'android', 'ios', 'web']),
             model: z.string().optional(),
         }).optional(),
