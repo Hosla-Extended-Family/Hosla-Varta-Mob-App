@@ -39,6 +39,18 @@ export class FriendController {
         });
     });
 
+    static cancelRequest = asyncHandler(async (req: Request, res: Response) => {
+        const { friendshipId } = req.params;
+        const userId = req.user!.id;
+
+        await FriendService.cancelRequest(userId, friendshipId);
+
+        res.status(200).json({
+            success: true,
+            message: 'Friend request cancelled successfully',
+        });
+    });
+
     static removeFriend = asyncHandler(async (req: Request, res: Response) => {
         const { friendshipId } = req.params;
         const userId = req.user!.id;
