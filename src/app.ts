@@ -1,4 +1,5 @@
 import express from 'express';
+import http from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -9,10 +10,13 @@ import { apiRateLimiter } from './middlewares/rateLimiter';
 import { platformMiddleware } from './middlewares/platformMiddleware';
 import morgan from 'morgan';
 import logger, { stream } from './utils/logger';
+import { initSocket } from './config/socket';
+import { registerChatHandlers } from './socket/chatHandlers';
 import './config/firebase';
 import './jobs/worker';
 
 const app = express();
+const httpServer = http.createServer(app);
 
 app.use(helmet());
 app.use(cors({
@@ -51,11 +55,14 @@ app.use(errorHandler);
 
 const startServer = async () => {
     try {
-        const server = app.listen(config.port, () => {
+        const io = initSocket(httpServer);
+        io.on('connection', (socket) => registerChatHandlers(socket));
+
+        httpServer.listen(config.port, () => {
             logger.info(`Server running on port ${config.port} in ${config.env} mode`);
         });
 
-        server.timeout = config.app.serverTimeout;
+        httpServer.timeout = config.app.serverTimeout;
         logger.info(`Server timeout set to ${config.app.serverTimeout}ms`);
     } catch (error) {
         logger.error('Failed to start server:', error);

@@ -9,6 +9,7 @@ import deviceRoutes from './deviceRoutes';
 import tagRoutes from './tagRoutes';
 import friendRoutes from './friendRoutes';
 import emergencyRoutes from './emergencyRoutes';
+import chatRoutes from './chatRoutes';
 // import uploadRoutes from './uploadRoutes';
 
 const router = Router();
@@ -33,6 +34,7 @@ router.use('/devices', deviceRoutes);
 router.use('/tags', tagRoutes);
 router.use('/friends', friendRoutes);
 router.use('/emergency', emergencyRoutes);
+router.use('/chats', chatRoutes);
 // router.use('/upload', uploadRoutes);
 
 export default router;
